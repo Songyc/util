@@ -5,15 +5,22 @@
 	<title>Document</title>
 </head>
 <body>
-
+	<script></script>
+	<div>
+			
+	</div>
 	<script src="util.js"></script>
 	<script>
 	var domain = window.location.href.match(/(.+)\//)[1],
-		relative = '/data.js', url = domain + relative;
+		relative = '/data.html', url = domain + relative;
 
 	util.ajax({
 		url: url,
-		dataType: 'jsonp',
+		async: false,
+		data: {
+			test: 1
+		},
+		dataType: 'html',
 		success: function (data) {
 			console.log(data);
 		}

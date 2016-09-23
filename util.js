@@ -268,7 +268,7 @@ var util = {
 
         cache = prop.cache;
 
-        if(cache) {
+        if(!cache) {
             url = this.addParam(url, {t: 'util' + new Date().getTime()});
         }
 
@@ -293,9 +293,9 @@ var util = {
 
     ajaxCompleted: function (prop) {
         var xhr = prop.xhr,
-            self = this,
+            self = this, 
             async, success, responseText,
-            dataType;
+            data, dataType;
 
         async = prop.async;
 
@@ -319,18 +319,13 @@ var util = {
         }else {
             responseText = xhr.responseText;
 
-            responseText = self.convertDataType(responseText, prop);
-
-            success = prop.success;
-            if(success) {
-                success.call(xhr, responseText);
-            }
+            self.convertDataType(responseText, prop);
         }
     },
 
     convertDataType: function (responseText, prop) {
         var dataType = prop.dataType,
-            data,
+            data, self = this,
             rkey = /([^'"{}:,]+?):([^'"{}:,]+?)[,}]/g,
             rspace = /[\t\r\n\v]/g,
             rjson = /^\{/, 
@@ -352,17 +347,26 @@ var util = {
             return obj;
         }
 
+        function complete(data) {
+            if(prop.success) {
+                prop.success.call(prop.xhr, data);
+            }else if(prop.fail) {
+                prop.fail.call(prop.xhr, data);
+            }
+        }
+
         var convert = {
             json: function (responseText) {
                 if(rjson.test(responseText)) {
-                    return stringConvertToJSON(responseText);
-                }
+                    var data = stringConvertToJSON(responseText);
 
-                return responseText;
+                    complete(data);
+                }
             },
 
             jsonp: function (responseText) {
-                var data, name, container, result;   
+                var data, name, container, result,
+                    id;   
 
                 result = responseText.match(rjsonp);
 
@@ -370,39 +374,38 @@ var util = {
                     name = result[1];
                     data = stringConvertToJSON(result[2]);
 
-                    var container = 
-                        'function ' + name + '(data, xhr) {' +
-                            'if(prop.success){' + 
-                                'prop.success.call(xhr, data);' +
-                            '}else if(prop.fail){' +
-                                'prop.fail.call(xhr, data);' + 
-                            '}' +
-                        '}' +
-                        name + '(data, xhr)'; 
-                    // var container = 'prop.success.call(xhr, data)';
+                    var script = document.createElement('script');
+                    script.src = prop.url;
+                    script.id = id;
 
-                    fn = new Function ('xhr', 'data', container);
+                    window[name] = function (data) {
+                        complete(data);
 
-                    fn();
-                    // eval('name()');
+                        delete window[name];
+                        document.querySelector('head').removeChild(script);
+                    }
+
+                    document.querySelector('head').appendChild(script);
 
                 }else if(rjson.test(responseText)){
-                   data = this.json(responseText);
+                   this.json(responseText);
                 }
             },
 
-            html: function (responseText) {
-
+            string: function (responseText) {
+                complete(responseText);
             },
 
-            string: function () {
+            js: function (responseText) {
+                window.eval(responseText);
+            },
 
+            html: function (responseText) {
+               complete(responseText);
             }
         }
 
-        data = convert[dataType](responseText);
-
-        return data;
+        convert[dataType](responseText);
     },
 
     ajaxConfig: function () {
@@ -435,5 +438,90 @@ var util = {
         return xhr;
     },
 
+    data: function (elem, key, value) {
+        if(!elem) {
+           return; 
+        }
+
+        if(elem.nodeType !== 1) {
+            return elem;
+        }
+
+        var cache, uuid, elemCache;
+
+        cache = this.cache;
+
+        if(!cache) {
+            this.cache = cache = {};
+            cache.uuid = 0;
+        }
+
+        uuid = elem.uuid;
+
+        if(!uuid) {
+            elem.uuid = uuid = ++cache.uuid;
+        }
+
+        elemCache = cache[uuid];
+
+        if(!elemCache) {
+            cache[uuid] = elemCache = {};
+        }
+
+        if(value !== undefined) {
+            elemCache[key] = value;
+        }
+
+        return elemCache[key];
+    },
+
+    removeData: function (elem, key) {
+        if(!elem) {
+            return;
+        }
+
+        var cache, uuid, elemCache,
+            data;
+
+        cache = this.cache;
+
+        if(!cache) {
+            return elem;
+        }
+
+        uuid = elem.uuid;
+
+        if(!uuid) {
+            return elem;
+        }
+
+        elemCache = cache[uuid];
+
+        if(!elemCache) {
+            return elem;
+        }
+
+        if(elemCache.hasOwnProperty(key)) {
+            delete elemCache[key];
+        }
+    },
+
+    replceSrc: function (target,type){
+        var imgs = target.querySelectorAll("img"),
+            img;
+        
+        if (!imgs) {
+            return;   
+        }
+
+        for (var i = 0, len = imgs.length; i < len; i++) {
+            img = imgs[i];
+            
+            if (img.getAttribute(type) && !img.getAttribute('loaded')) {
+                img.src = img.getAttribute(type);
+                img.setAttribute('loaded', 'true');
+            }
+        }
+    }
 
 }
